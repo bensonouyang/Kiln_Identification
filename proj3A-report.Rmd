@@ -1,0 +1,441 @@
+---
+title: "**Project 3A Summary**"
+author: 
+- Benson Ou-yang (301277342)
+- Kaggle Username:\ BensonOuyang
+date: December 5, 2021
+abstract:
+  
+
+output: 
+  bookdown::pdf_document2:
+    extra_dependencies: "subfig"
+    fig_caption: yes
+    includes: 
+      in_header: my_header.tex
+---
+
+\newpage
+
+
+# Methods
+
+## Reading the Data
+
+We used a for loop to loop through all the images in the training dataset, and from the package \emph{imageio}, the function "imread" takes each image and produces an array of the shape (256,256,3). The NumPy array corresponds to the height, width and RGB colour channel. The package \emph{PIL} uses the function "fromarray" and "resize" to change the height and width of each image. Next, inside the loop, the mean at the second axis is taken for the grayscale version of the picture. The final image array gets stored inside a NumPy array of size (Number of images, Height, Width). 
+
+## Feature Engineering
+
+Colour can be a feature that can help to identify kilns. The RGB array is kept by not taking the mean of the picture array at the second axis. 
+
+For the size of the images, we started with the image dimension of (28,28), but this is a small image thus can be difficult for the model to determine the correct identification of kilns. Afterwards, we tested the image sizes (200,200), (256,256), and (300,300) by splitting the training data into a training and testing set to evaluate the model's AUC. 
+
+Another way for a model to increase predictive power and decrease the risk of overfitting is to augment the images. It is also a way to increase the number of samples for the neural network. From the \emph{albumentations} package, \emph{RandomCrop, GaussianBlur, and Flip} changes the images in different ways. \emph{RandomCrop} takes each image and randomly subsets a portion of an image. \emph{GaussianBlur} blurs an image by using a Gaussian function. \emph{Flip} flips an image either horizontally, vertically or both. 
+
+
+\begin{figure}[c]
+  \centering
+  \includegraphics[height = 3.5cm]{original.png} \includegraphics[height = 3.5cm]{randomcrop.png}
+  \caption{Original \& RandomCrop Augmented Image}
+  \label{fig:origcrop}
+\end{figure}
+
+\begin{figure}[c]
+  \centering
+  \includegraphics[height = 3.5cm]{gaussianblur.png} \includegraphics[height = 3.5cm]{flip.png}
+  \caption{GaussianBlur \& Flip Augmented Image}
+  \label{fig:blurflip}
+\end{figure}
+
+
+
+
+Figure \@ref(fig:origcrop) shows an image in its original state(left) and after augmenting with \emph{RandomCrop}(right).
+
+Figure \@ref(fig:blurflip) shows an image after \emph{GuassianBlur} augmentation(left) and after augmenting with \emph{Flip}(right).
+
+## Convolutional Neural Network
+
+The first layer of our \emph{Convolutional Neural Network} uses 16 filters with a ReLU activation function. The input shape of our data is (height, width, 3). Next, we have a max-pooling layer that divides each spatial dimension by 2 to reduce image size while retaining as much information as possible. Then the layers structure is repeated two times where each convolutional layer doubles the number of filters. Afterwards, we flatten the input to produce a 1D array of features for the two dense layers to produce the outputs. The kilns prediction is for only two classes, either zero for not a chimney kiln or one for either no kiln or modernized kiln. There are only two classes to predict, thus a sigmoid activation function in the last dense layer outputs either class.  
+
+
+# Results
+
+## Colour 
+
+![](grayscale.png)
+![](colour.png)
+
+\vspace{0.5cm}
+
+After submitting on Kaggle, the \emph{Convolutional Neural Network} with colour inputs performed better than the grayscale inputs. 
+
+## Image size
+
+We chose the image dimensions (256,256) as the \emph{Convolutional Neural Network} produced a higher mean validation AUC out of the epochs when compared to the dimensions (200,200) and (300,300). If the mean validation AUC was higher for the other dimensions, we would have explored in that direction. 
+
+## Data Augmentation
+
+Due to memory allocation issues, we removed the random cropped images so our final model inputs were the original, the gaussian blurred, and flipped images. With the right image dimensions, incorporating colour and augmentating data, we produced our best results. 
+
+\vspace{0.5cm}
+
+![](augmented.png)
+
+\newpage
+
+# Submission Code
+
+## Starting Code (Importing libraries and reading in data)
+
+```python
+import tensorflow as tf
+import imageio
+import os
+from PIL import Image
+import pandas as pd
+import numpy as np
+```
+
+```python
+N = tr.shape[0]
+```
+
+```python
+tr = pd.read_csv('Ytr.txt')
+te = pd.read_csv('pred.txt')
+```
+
+```python
+def read_image(N,D,X):
+    Xt = np.zeros([N,D,D])
+    #found = list()
+    for ii in range(N):
+        if ii % 100 == 0:
+            print('%d / %d' % (ii, N))
+        teId = X['id'][ii]
+        path = 'images/%05d.png' %teId
+        
+        pic = imageio.imread(path)
+        pic = Image.fromarray(pic).resize((D,D)) # NOTE : this can be improved.
+        pic = np.mean(pic,axis = 2) # NOTE: this can be improved
+        pic = np.array(pic)
+        # print(pic.shape)
+        Xt[ii,:,:] = pic
+    Xt = Xt/255
+    return Xt
+```
+
+```python
+Xtr_1 = read_image(tr.shape[0],200,tr)
+```
+
+```python
+Xtr_2 = Xtr_1.reshape(-1,200,200,1)
+```
+
+```python
+Xte_1 = read_image(te.shape[0],200,te)
+Xte_2 = Xte_1.reshape(-1,200,200,1)
+```
+
+## pred1.csv (CNN for grayscale inputs)
+
+
+```python
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(16,(3,3), activation = 'relu', input_shape = (200,200,1)),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(32,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(64,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid') # output neuron for number of classes
+])
+```
+
+
+```python
+model.compile(loss = 'binary_crossentropy',
+             optimizer = tf.keras.optimizers.RMSprop(learning_rate = 0.001),
+              metrics = ['accuracy'])
+```
+
+
+
+```python
+model.fit(Xtr_2,np.array(tr['label']), epochs = 30)
+```
+
+```python
+pred = model.predict(Xte_2)
+```
+
+
+```python
+te1 = te.copy()
+```
+
+
+```python
+te1['score'] = pred
+```
+
+
+```python
+te1.to_csv('pred1.csv',index = False)
+```
+
+## pred2.csv (pred1.csv rounded)
+
+```python
+te2 = te.copy()
+```
+
+
+```python
+te2['score'] = np.round(pred)
+```
+
+
+```python
+te2.to_csv('pred2.csv',index = False)
+```
+
+## pred3.csv (all 0s)
+
+```python
+te2['score'] = 0
+te2.to_csv('pred3.csv',index = False)
+```
+
+## pred4.csv (all 1s)
+
+```python
+te2['score'] = 1
+te2.to_csv('pred4.csv',index = False)
+
+```
+
+## pred5.csv (Included RBG channels)
+
+```python
+def read_image(N,D,X):
+    Xt = np.zeros([N,D,D,3])
+    #found = list()
+    for ii in range(N):
+        #if ii % 100 == 0:
+            #print('%d / %d' % (ii, N))
+        teId = X['id'][ii]
+        path = 'images/%05d.png' %teId
+        
+        pic = imageio.imread(path)
+        pic = Image.fromarray(pic).resize((D,D)) # NOTE : this can be improved.
+        # pic = np.mean(pic,axis = 2) # NOTE: this can be improved
+        pic = np.array(pic)
+        # print(pic.shape)
+        Xt[ii,:,:,:] = pic
+    Xt = Xt/255
+    return Xt
+
+Xtr_1 = read_image(tr.shape[0],200,tr)
+Xtr_2 = Xtr_1.reshape(-3,200,200,3)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(16,(3,3), activation = 'relu', input_shape = (200,200,3)),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(32,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(64,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid') # output neuron for number of classes
+])
+
+model.compile(loss = 'binary_crossentropy',
+             optimizer = tf.keras.optimizers.RMSprop(learning_rate = 0.001),
+              metrics = ['accuracy'])
+              
+model.fit(Xtr_2,np.array(tr['label']), epochs = 30)
+
+Xte_1 = read_image(te.shape[0],200,te)
+Xte_2 = Xte_1.reshape(-3,200,200,3)
+
+pred = model.predict(Xte_2)
+te1 = te.copy()
+te1['score'] = pred
+te1.to_csv('pred5.csv',index = False)
+```
+
+
+
+
+## pred6.csv (More layers CNN)
+
+```python
+model = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(16,(3,3), activation = 'relu', input_shape = (200,200,3)),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(32,(3,3), activation = 'relu'),
+    tf.keras.layers.Conv2D(32,(3,3), activation = 'relu'),
+    
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(64,(3,3), activation = 'relu'),
+    tf.keras.layers.Conv2D(64,(3,3), activation = 'relu'),
+    
+    tf.keras.layers.MaxPool2D(2,2),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation = 'relu'),
+    tf.keras.layers.Dropout(0.5),
+    tf.keras.layers.Dense(256, activation = 'relu'),
+    tf.keras.layers.Dropout(0.5),
+    tf.keras.layers.Dense(1, activation = 'sigmoid') # output neuron for number of classes
+])
+
+model.compile(loss = 'binary_crossentropy',
+             optimizer = tf.keras.optimizers.RMSprop(learning_rate = 0.001),
+              metrics = ['accuracy'])
+              
+model.fit(Xtr_2,np.array(tr['label']), epochs = 75)
+pred = model.predict(Xte_2)
+te1 = te.copy()
+te1['score'] = pred
+te1.to_csv('pred6.csv',index = False)
+```
+
+
+## pred7.csv (CNN with Data Augmentation)
+
+```python
+def read_image(N,D,X):
+    Xt = np.zeros([N,D,D,3])
+    #found = list()
+    for ii in range(N):
+        #if ii % 100 == 0:
+            #print('%d / %d' % (ii, N))
+        teId = X['id'][ii]
+        path = 'images/%05d.png' %teId
+        
+        pic = imageio.imread(path)
+        pic = Image.fromarray(pic).resize((D,D)) # NOTE : this can be improved.
+        # pic = np.mean(pic,axis = 2) # NOTE: this can be improved
+        pic = np.array(pic)
+        # print(pic.shape)
+        Xt[ii,:,:,:] = pic
+    Xt = Xt/255
+    return Xt
+    
+# inspired by 
+# https://towardsdatascience.com/fast-feature-engineering-in-python-image-data-5d3a8a7bf616
+
+def read_augimage2(N,D,X):
+    Xt = np.zeros([N,D,D,3])
+    #found = list()
+    for ii in range(N):
+        #if ii % 100 == 0:
+            #print('%d / %d' % (ii, N))
+        teId = X['id'][ii]
+        path = 'images/%05d.png' %teId
+        
+        pic = imageio.imread(path)
+        pic = Image.fromarray(pic).resize((D,D)) # NOTE : this can be improved.
+        # pic = np.mean(pic,axis = 2) # NOTE: this can be improved
+        pic1 = np.array(pic)
+        #pic2 = A.RandomCrop(width = 256, height = 256)(image = pic1)
+        pic3 = A.GaussianBlur(p=0.8)(image=pic1)['image']
+        #pic4 = A.Flip(0.8)(image=pic1)
+        # print(pic.shape)
+        #Xt[ii,:,:,:] = pic1
+        #Xt[ii,:,:,:] = pic2
+        Xt[ii,:,:,:] = pic3
+        #Xt[ii+3,:,:,:] = pic4
+    Xt = Xt/255
+    return Xt
+    
+    
+def read_augimage3(N,D,X):
+    Xt = np.zeros([N,D,D,3])
+    #found = list()
+    for ii in range(N):
+        #if ii % 100 == 0:
+            #print('%d / %d' % (ii, N))
+        teId = X['id'][ii]
+        path = 'images/%05d.png' %teId
+        
+        pic = imageio.imread(path)
+        pic = Image.fromarray(pic).resize((D,D)) # NOTE : this can be improved.
+        # pic = np.mean(pic,axis = 2) # NOTE: this can be improved
+        pic1 = np.array(pic)
+        #pic2 = A.RandomCrop(width = 256, height = 256)(image = pic1)
+        #pic3 = A.GaussianBlur(p=0.8)(image=pic1)
+        pic4 = A.Flip(0.8)(image=pic1)['image']
+        # print(pic.shape)
+        #Xt[ii,:,:,:] = pic1
+        #Xt[ii,:,:,:] = pic2
+        #Xt[ii+2,:,:,:] = pic3
+        Xt[ii,:,:,:] = pic4
+    Xt = Xt/255
+    return Xt
+```
+
+```python
+Xtr_1 = read_image(tr.shape[0],256,tr)
+Xtr_1 = Xtr_1.reshape(-3,256,256,3)
+Xte_1 = read_image(te.shape[0],256,te)
+Xte_2 = Xte_1.reshape(-3,256,256,3)
+
+aug_X2 = read_augimage2(tr.shape[0],256,tr)
+aug_X3 = read_augimage3(tr.shape[0],256,tr)
+aug_X2 = aug_X2.reshape(-3,256,256,3)
+aug_X3 = aug_X3.reshape(-3,256,256,3)
+
+allX = np.concatenate((Xtr_1,aug_X2,aug_X3),axis = 0)
+y = np.concatenate((np.array(tr['label']),np.array(tr['label']),np.array(tr['label'])),axis = 0)
+```
+
+```python
+model1 = tf.keras.Sequential([
+    tf.keras.layers.Conv2D(16,(3,3), activation = 'relu', input_shape = (256,256,3)),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(32,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Conv2D(64,(3,3), activation = 'relu'),
+    tf.keras.layers.MaxPool2D(2,2),
+    
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation = 'relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid') # output neuron for number of classes
+])
+
+
+model1.compile(loss = 'binary_crossentropy',
+             optimizer = tf.keras.optimizers.RMSprop(learning_rate = 0.001),
+              metrics = ['accuracy','AUC'])
+
+model1.fit(allX,y, epochs = 30)
+
+pred = model1.predict(Xte_2)
+
+te1 = te.copy()
+te1['score'] = pred
+te1.to_csv('pred7.csv',index = False)
+
+```
+
+
+
+
+
