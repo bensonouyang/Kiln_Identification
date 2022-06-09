@@ -40,4 +40,4 @@ To see the report:
 * Open [proj3A-report.Rmd](https://github.com/bensonouyang/Kiln_Identification/blob/main/proj3A-report.Rmd) to see how the report was made
 
 ## Source
-[In class kaggle competition]([https://www.kaggle.com/dgawlik/nyse](https://www.kaggle.com/competitions/stat440-21-project3a))
+[In class kaggle competition](https://www.kaggle.com/competitions/stat440-21-project3a)
